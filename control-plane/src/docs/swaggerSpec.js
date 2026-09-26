@@ -42,6 +42,7 @@ Welcome to the interactive Swagger / OpenAPI 3.0 specification for **Resilify** 
     { name: 'Gateway & Traffic', description: 'Reverse proxy gateway, load balancer stats, and reset controls' },
     { name: 'Rate Limiting', description: 'Dynamic token bucket rate limiter rules and stats' },
     { name: 'Load Generator', description: 'Built-in synthetic load testing engine' },
+    { name: 'Database & Cloud Backup', description: 'MongoDB stats, document browsing, and cloud backup replication' },
     { name: 'System & Health', description: 'Control plane health checks and LAN IP networking discovery' },
   ],
   paths: {
@@ -398,6 +399,102 @@ Welcome to the interactive Swagger / OpenAPI 3.0 specification for **Resilify** 
           200: { description: 'Forwarded response from healthy application instance' },
           429: { description: 'Too Many Requests (Rate limit exceeded)' },
           503: { description: 'No healthy upstream instances available' },
+        },
+      },
+    },
+    '/api/database/stats': {
+      get: {
+        tags: ['Database & Cloud Backup'],
+        summary: 'Get database storage statistics and per-collection document counts',
+        responses: {
+          200: {
+            description: 'Database-level and collection-level statistics',
+            content: {
+              'application/json': {
+                example: {
+                  database: 'resilify',
+                  totalCollections: 4,
+                  totalDocuments: 128,
+                  dataSize: 65536,
+                  storageSize: 131072,
+                  indexSize: 32768,
+                  collections: [
+                    { name: 'events', documentCount: 85, sizeBytes: 32768, avgDocSize: 385, indexes: 2 },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/database/collections/{name}/documents': {
+      get: {
+        tags: ['Database & Cloud Backup'],
+        summary: 'Browse documents in a collection (paginated)',
+        parameters: [
+          { name: 'name', in: 'path', required: true, schema: { type: 'string' }, example: 'projects' },
+          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 20 } },
+        ],
+        responses: {
+          200: { description: 'Paginated document list with total count' },
+        },
+      },
+    },
+    '/api/database/backup/status': {
+      get: {
+        tags: ['Database & Cloud Backup'],
+        summary: 'Get cloud backup connection status and last sync details',
+        responses: {
+          200: { description: 'Current cloud backup configuration and sync status' },
+        },
+      },
+    },
+    '/api/database/backup/configure': {
+      post: {
+        tags: ['Database & Cloud Backup'],
+        summary: 'Connect to a cloud MongoDB (Atlas) for backup replication',
+        description: 'Paste any MongoDB Atlas or cloud URI. Resilify will establish a separate connection for data replication.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['uri'],
+                properties: {
+                  uri: { type: 'string', example: 'mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/resilify-backup' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Successfully connected to cloud database' },
+          400: { description: 'Invalid MongoDB URI' },
+          500: { description: 'Connection failed' },
+        },
+      },
+    },
+    '/api/database/backup/sync': {
+      post: {
+        tags: ['Database & Cloud Backup'],
+        summary: 'Replicate all local MongoDB data to the connected cloud database',
+        description: 'Copies all documents from every collection to the cloud backup. Existing cloud data is replaced.',
+        responses: {
+          200: { description: 'Sync started (runs asynchronously)' },
+          400: { description: 'Cloud backup not configured' },
+          409: { description: 'Sync already in progress' },
+        },
+      },
+    },
+    '/api/database/backup/disconnect': {
+      post: {
+        tags: ['Database & Cloud Backup'],
+        summary: 'Disconnect from cloud backup database',
+        responses: {
+          200: { description: 'Cloud backup disconnected' },
         },
       },
     },

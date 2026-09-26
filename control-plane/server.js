@@ -86,8 +86,10 @@ const swaggerUiOptions = {
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
 
 // ── API Routes ───────────────────────────────────────────────────────────────
+const databaseRouter = require('./src/routes/database');
 app.use('/api/projects', projectsRouter);
 app.use('/api/gateway', gatewayRouter);
+app.use('/api/database', databaseRouter);
 
 app.get('/api/health', async (req, res) => {
   res.json({
