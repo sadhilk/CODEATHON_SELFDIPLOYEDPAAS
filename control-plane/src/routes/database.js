@@ -24,7 +24,7 @@ router.get('/stats', async (req, res) => {
     }
 
     // Get DB-level stats
-    const dbStats = await db.stats();
+    const dbStats = await db.command({ dbStats: 1 });
 
     // Get all collections and their counts
     const collections = await db.listCollections().toArray();
@@ -32,13 +32,17 @@ router.get('/stats', async (req, res) => {
 
     for (const col of collections) {
       const count = await db.collection(col.name).countDocuments();
-      const stats = await db.collection(col.name).stats().catch(() => null);
+      let colStats = null;
+      try {
+        colStats = await db.command({ collStats: col.name });
+      } catch (_) { /* ignore */ }
+      const indexes = await db.collection(col.name).indexes().catch(() => []);
       collectionStats.push({
         name: col.name,
         documentCount: count,
-        sizeBytes: stats?.size || 0,
-        avgDocSize: stats?.avgObjSize || 0,
-        indexes: stats?.nindexes || 0,
+        sizeBytes: colStats?.size || 0,
+        avgDocSize: colStats?.avgObjSize || 0,
+        indexes: indexes.length || colStats?.nindexes || 0,
       });
     }
 
