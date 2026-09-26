@@ -1,4 +1,9 @@
 require('dotenv').config();
+const dns = require('dns');
+try {
+  // Use public DNS resolvers to ensure reliable mongodb+srv:// resolution across all networks
+  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+} catch (_) {}
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');

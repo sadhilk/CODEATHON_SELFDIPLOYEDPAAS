@@ -3,7 +3,7 @@ import BACKEND_URL from './socket';
 
 const api = axios.create({
   baseURL: BACKEND_URL,
-  timeout: 10000,
+  timeout: 25000,
 });
 
 export default api;

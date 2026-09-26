@@ -1,6 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const dns = require('dns');
+
+// Ensure DNS resolvers can resolve Atlas SRV records
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+} catch (_) {}
 
 // ─── In-memory cloud backup state ────────────────────────────────────────────
 let cloudBackupConfig = {
@@ -97,6 +103,47 @@ router.get('/backup/status', (req, res) => {
   res.json(cloudBackupConfig);
 });
 
+async function resolveAtlasUri(uri) {
+  if (!uri || !uri.startsWith('mongodb+srv://')) {
+    return uri;
+  }
+  try {
+    const { Resolver } = require('dns').promises;
+    const resolver = new Resolver();
+    try {
+      resolver.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+    } catch (_) {}
+
+    const parsed = new URL(uri.replace(/^mongodb\+srv:\/\//, 'http://'));
+    const auth = parsed.username
+      ? `${parsed.username}${parsed.password ? ':' + parsed.password : ''}@`
+      : '';
+    const hostname = parsed.hostname;
+    const pathname = parsed.pathname || '/';
+
+    const srvRecords = await resolver.resolveSrv(`_mongodb._tcp.${hostname}`).catch(() => []);
+    if (!srvRecords || srvRecords.length === 0) {
+      return uri;
+    }
+
+    const hosts = srvRecords.map((s) => `${s.name}:${s.port}`).join(',');
+    let extraParams = 'ssl=true&authSource=admin';
+    try {
+      const txtRecords = await resolver.resolveTxt(hostname);
+      if (txtRecords && txtRecords.length > 0) {
+        const flatTxt = txtRecords.flat().join('&');
+        extraParams = `ssl=true&${flatTxt}`;
+      }
+    } catch (_) {}
+
+    const search = parsed.search ? `${parsed.search}&${extraParams}` : `?${extraParams}`;
+    return `mongodb://${auth}${hosts}${pathname}${search}`;
+  } catch (err) {
+    console.warn('[CloudBackup] Atlas SRV auto-resolve fallback:', err.message);
+    return uri;
+  }
+}
+
 // ─── POST /api/database/backup/configure ─────────────────────────────────────
 // User pastes their MongoDB Atlas URI and we connect + verify
 router.post('/backup/configure', async (req, res) => {
@@ -116,10 +163,13 @@ router.post('/backup/configure', async (req, res) => {
     cloudBackupConfig.uri = uri;
     cloudBackupConfig.lastError = null;
 
+    // Auto-resolve SRV if local network blocks SRV queries
+    const effectiveUri = await resolveAtlasUri(uri.trim());
+
     // Create a separate mongoose connection to the cloud
-    cloudConnection = await mongoose.createConnection(uri, {
-      serverSelectionTimeoutMS: 8000,
-      connectTimeoutMS: 8000,
+    cloudConnection = await mongoose.createConnection(effectiveUri, {
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000,
     }).asPromise();
 
     cloudBackupConfig.status = 'CONNECTED';
