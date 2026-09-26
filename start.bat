@@ -21,10 +21,11 @@ echo   Resilify is starting up!
 echo.
 echo   Dashboard (Local):     http://localhost:3001
 echo   Control Plane (Local): http://localhost:4000
+echo   API Documentation:     http://localhost:4000/api/docs
 echo   Student Portal (Local):http://localhost:4000/apps/student-portal/
 echo.
 echo   LAN Network Access (for Phone / other devices on Wi-Fi):
-node -e "const os = require('os'); const nets = os.networkInterfaces(); for (const n in nets) for (const net of nets[n]) if (net.family === 'IPv4' && !net.internal && !net.address.startsWith('169.254.')) { console.log('   Student Portal (Phone): http://' + net.address + ':4000/apps/student-portal/'); console.log('   Dashboard (Phone):      http://' + net.address + ':3001'); }"
+node -e "const os = require('os'); const nets = os.networkInterfaces(); for (const n in nets) for (const net of nets[n]) if (net.family === 'IPv4' && !net.internal && !net.address.startsWith('169.254.')) { console.log('   Student Portal (Phone): http://' + net.address + ':4000/apps/student-portal/'); console.log('   API Docs (Phone):       http://' + net.address + ':4000/api/docs'); console.log('   Dashboard (Phone):      http://' + net.address + ':3001'); }"
 echo ==========================================
 echo.
 pause

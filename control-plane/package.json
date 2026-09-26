@@ -22,6 +22,7 @@
     "mongoose": "^9.10.2",
     "pidusage": "^4.0.1",
     "socket.io": "^4.8.4",
+    "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.2",
     "yaml": "^2.9.1"
   }

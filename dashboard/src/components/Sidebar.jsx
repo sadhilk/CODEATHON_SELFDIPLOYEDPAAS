@@ -81,6 +81,30 @@ export default function Sidebar() {
       <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
         <div>Control Plane: <span style={{ color: 'var(--green)' }}>localhost:4000</span></div>
         <div style={{ marginTop: 4 }}>Gateway: <span style={{ color: 'var(--cyan)' }}>/apps/:project/*</span></div>
+        <div style={{ marginTop: 8 }}>
+          <a
+            href="http://localhost:4000/api/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              color: '#38bdf8',
+              textDecoration: 'none',
+              fontWeight: 600,
+              fontSize: 12,
+              padding: '4px 8px',
+              backgroundColor: 'rgba(56, 189, 248, 0.1)',
+              borderRadius: 4,
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              width: '100%',
+              justifyContent: 'center',
+            }}
+          >
+            <span>📜</span> Swagger API Docs ↗
+          </a>
+        </div>
       </div>
     </div>
   );

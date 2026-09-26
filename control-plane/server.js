@@ -64,6 +64,27 @@ app.use('/apps/:projectName', async (req, res, next) => {
   }
 });
 
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./src/docs/swaggerSpec');
+
+// ── API Documentation (Swagger / OpenAPI 3.0) ──────────────────────────────
+app.get('/api/docs/openapi.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.json(swaggerSpec);
+});
+
+// Swagger UI with custom dark/slate styling to match Resilify aesthetic
+const swaggerUiOptions = {
+  customSiteTitle: 'Resilify API Documentation',
+  customCss: `
+    .swagger-ui .topbar { background-color: #0f172a; border-bottom: 1px solid #1e293b; }
+    .swagger-ui .topbar .topbar-wrapper a span { font-weight: 700; color: #38bdf8; }
+    .swagger-ui .info .title { color: #0f172a; }
+  `,
+};
+
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
+
 // ── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/projects', projectsRouter);
 app.use('/api/gateway', gatewayRouter);

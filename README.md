@@ -20,7 +20,8 @@ Resilify deploys Node.js and web applications as real OS child processes, load b
 5. [Codebase Walkthrough](#codebase-walkthrough)
 6. [Libraries & Dependencies Guide](#libraries--dependencies-guide)
 7. [Getting Started (Local / Windows)](#getting-started--local-setup)
-8. [Testing the Features (Step-by-Step)](#testing-the-features-step-by-step)
+8. [API Documentation (Swagger / OpenAPI 3.0)](#-api-documentation-swagger--openapi-30)
+9. [Testing the Features (Step-by-Step)](#testing-the-features-step-by-step)
    - [Testing Student Portal (Auth, JWT, 1/10/50 Reqs, Phone LAN)](#1-testing-the-student-portal-with-phone--lan-access)
    - [Testing Adding & Removing the React Demo Project](#2-testing-adding--removing-the-react-demo-project)
    - [Testing Chaos Engineering in the Failure Lab](#3-testing-the-failure-lab-chaos-engineering)
@@ -287,6 +288,37 @@ This automatically launches:
 1. **MongoDB** on port `27017`
 2. **Resilify Control Plane** on port `4000` (listening on `0.0.0.0`)
 3. **Resilify Dashboard** on port `3001` (listening on `0.0.0.0`)
+
+---
+
+## 📜 API Documentation (Swagger / OpenAPI 3.0)
+
+Resilify features an interactive **Swagger UI** and raw **OpenAPI 3.0** specification endpoint for testing every control-plane capability directly from your browser.
+
+- **Interactive Swagger UI:** [`http://localhost:4000/api/docs`](http://localhost:4000/api/docs)
+- **OpenAPI 3.0 JSON Spec:** [`http://localhost:4000/api/docs/openapi.json`](http://localhost:4000/api/docs/openapi.json)
+
+### Key API Endpoints Reference
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | Overall system & MongoDB health check |
+| `GET` | `/api/system/network` | Auto-detect host IPv4 LAN address & gateway links |
+| `GET` | `/api/projects` | List all registered projects with live instance telemetry |
+| `POST` | `/api/projects` | Register a new application definition |
+| `GET` | `/api/projects/:name` | Inspect project status, metrics, and event audit history |
+| `DELETE`| `/api/projects/:name` | Stop & terminate all child processes and delete project |
+| `POST` | `/api/projects/:name/deploy` | Zero-downtime deployment (spawns OS child processes) |
+| `POST` | `/api/projects/:name/stop` | Gracefully stop all process instances |
+| `GET` | `/api/projects/:name/instances` | List all active child process instances (PID, port, RAM, CPU) |
+| `POST` | `/api/projects/:name/instances/:id/kill` | **Chaos Engineering**: Send real OS `SIGKILL` to test auto-healing |
+| `POST` | `/api/projects/:name/instances/:id/revive` | Manually respawn and revive an instance |
+| `GET` | `/api/projects/:name/events` | Query audit log for crashes, deployments, and scaling events |
+| `GET` | `/api/gateway/config` | View dynamic token bucket rate limiter rules & token stats |
+| `PUT` | `/api/gateway/config` | Update rate limiting thresholds dynamically in real time |
+| `POST` | `/api/gateway/load-generator/start` | Start synthetic HTTP load generator (`10`, `50`, `100+` RPS) |
+| `POST` | `/api/gateway/load-generator/stop` | Stop active load testing |
+| `ALL` | `/apps/:projectName/*` | Reverse-proxy gateway routing traffic to healthy backend workers |
 
 ---
 
