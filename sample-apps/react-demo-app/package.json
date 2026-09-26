@@ -1,0 +1,9 @@
+{
+  "name": "react-demo-app",
+  "version": "1.0.0",
+  "description": "Simple React App to test Resilify project creation and orchestration",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

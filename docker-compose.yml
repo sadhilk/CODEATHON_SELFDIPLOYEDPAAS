@@ -1,0 +1,96 @@
+version: '3.9'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resilify — Full Stack Docker Compose
+#
+# Services:
+#   mongo           — MongoDB (data store for projects, instances, events)
+#   control-plane   — Resilify Orchestrator + API Gateway (port 4000)
+#   dashboard       — React Control-Plane Dashboard served via nginx (port 3001)
+#
+# Run with:
+#   docker compose up --build
+#
+# Then open:
+#   Dashboard:      http://localhost:3001
+#   Control Plane:  http://localhost:4000
+#   Student Portal: http://localhost:4000/apps/student-portal/
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── MongoDB ─────────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7-jammy
+    container_name: resilify-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - resilify-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Control Plane & API Gateway ─────────────────────────────────────────────
+  control-plane:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resilify-control-plane
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      MONGO_URI: mongodb://mongo:27017/resilify
+      NODE_ENV: production
+      JWT_SECRET: resilify-cluster-jwt-secret-key-2026
+    volumes:
+      # Mount sample apps and data directory into the container
+      - ./sample-app:/app/sample-app:ro
+      - ./sample-apps:/app/sample-apps:ro
+      - resilify-data:/app/data
+    networks:
+      - resilify-net
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── React Dashboard ──────────────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: resilify-dashboard
+    restart: unless-stopped
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+    networks:
+      - resilify-net
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  resilify-net:
+    driver: bridge
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  mongo-data:
+    driver: local
+  resilify-data:
+    driver: local

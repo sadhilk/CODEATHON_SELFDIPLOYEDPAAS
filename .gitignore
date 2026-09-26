@@ -1,0 +1,44 @@
+# ─── Node Modules ────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+
+# ─── Build Outputs ───────────────────────────────────────────────────
+dashboard/dist/
+dashboard/.vite/
+*.tsbuildinfo
+
+# ─── Environment Files ───────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+control-plane/.env
+
+# ─── MongoDB Local Data ──────────────────────────────────────────────
+data/db/
+*.db
+*.log
+
+# ─── OS & Editor Junk ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Logs ────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+
+# ─── Package Lock (keep package-lock.json, ignore yarn/pnpm) ─────────
+yarn.lock
+pnpm-lock.yaml
+
+# ─── Docker ──────────────────────────────────────────────────────────
+# (keep Dockerfile and docker-compose tracked)
+
+# ─── Resilify Runtime Artifacts ──────────────────────────────────────
+# portal_users.json is auto-generated at first run
+data/portal_users.json

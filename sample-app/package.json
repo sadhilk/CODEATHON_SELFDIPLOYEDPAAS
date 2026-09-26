@@ -1,0 +1,10 @@
+{
+  "name": "student-portal",
+  "version": "1.0.0",
+  "description": "Student Portal demo app with Auth and Resilify Gateway integration",
+  "main": "server.js",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.3"
+  }
+}

@@ -1,0 +1,70 @@
+version: '3.9'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resilify — Development Docker Compose
+# Mounts source code as volumes for live reload during development
+#
+# Run with:
+#   docker compose -f docker-compose.dev.yml up
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  mongo:
+    image: mongo:7-jammy
+    container_name: resilify-mongo-dev
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-dev-data:/data/db
+    networks:
+      - resilify-dev-net
+
+  control-plane:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resilify-control-plane-dev
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      MONGO_URI: mongodb://mongo:27017/resilify
+      NODE_ENV: development
+      JWT_SECRET: resilify-dev-secret
+    volumes:
+      - ./control-plane:/app/control-plane
+      - ./sample-app:/app/sample-app
+      - ./sample-apps:/app/sample-apps
+      - ./data:/app/data
+      - /app/control-plane/node_modules
+    networks:
+      - resilify-dev-net
+
+  dashboard-dev:
+    image: node:20-alpine
+    container_name: resilify-dashboard-dev
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - control-plane
+    ports:
+      - "3001:3001"
+    environment:
+      VITE_API_URL: http://localhost:4000
+    volumes:
+      - ./dashboard:/app
+      - /app/node_modules
+    networks:
+      - resilify-dev-net
+
+networks:
+  resilify-dev-net:
+    driver: bridge
+
+volumes:
+  mongo-dev-data:

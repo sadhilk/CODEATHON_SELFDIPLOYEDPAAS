@@ -1,0 +1,17 @@
+{
+  "name": "resilify",
+  "version": "1.0.0",
+  "description": "Self-hosted application orchestrator with live failure recovery",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "start:sample": "node src/index.js sample-apps/student-portal/resilify.config.yaml"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "http-proxy": "^1.18.1",
+    "socket.io": "^4.7.5",
+    "js-yaml": "^4.1.0",
+    "pidusage": "^3.0.2"
+  }
+}

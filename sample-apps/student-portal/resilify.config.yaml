@@ -1,0 +1,14 @@
+name: student-portal
+entry: server.js
+port: 3000
+env: {}
+
+scaling:
+  minInstances: 2
+  maxInstances: 5
+  requestsPerSecondThreshold: 20
+
+health:
+  endpoint: /health
+  intervalMs: 2000
+  failureThreshold: 3
