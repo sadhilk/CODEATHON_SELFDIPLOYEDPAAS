@@ -38,10 +38,13 @@ export const resetStats = (projectName) => api.post(`/api/gateway/reset-stats/${
 export const getSystemHealth = () => api.get('/api/health');
 export const getNetworkInfo = () => api.get('/api/system/network');
 
-// Database management & cloud backup
+// Database management, local replica & cloud backup
 export const getDatabaseStats = () => api.get('/api/database/stats');
+export const getLocalReplicaStats = () => api.get('/api/database/local-replica/stats');
+export const syncLocalReplica = () => api.post('/api/database/local-replica/sync');
 export const getCollectionDocuments = (name, page = 1, limit = 20) => api.get(`/api/database/collections/${name}/documents?page=${page}&limit=${limit}`);
 export const getBackupStatus = () => api.get('/api/database/backup/status');
 export const configureCloudBackup = (uri) => api.post('/api/database/backup/configure', { uri });
 export const syncCloudBackup = () => api.post('/api/database/backup/sync');
 export const disconnectCloudBackup = () => api.post('/api/database/backup/disconnect');
+

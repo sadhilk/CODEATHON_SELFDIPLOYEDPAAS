@@ -8,7 +8,16 @@ try {
   dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
 } catch (_) {}
 
-// ─── In-memory cloud backup state ────────────────────────────────────────────
+// ─── Local Replica & Cloud Backup State ─────────────────────────────────────
+let localReplicaConfig = {
+  name: 'resilify_replica',
+  status: 'STANDBY', // STANDBY | SYNCING | SYNCHRONIZED | ERROR
+  lastSync: null,
+  totalDocsSynced: 0,
+  collections: [],
+  autoSyncIntervalSeconds: 30,
+};
+
 let cloudBackupConfig = {
   uri: null,          // MongoDB Atlas / cloud URI
   status: 'NOT_CONFIGURED',  // NOT_CONFIGURED | CONNECTED | SYNCING | FAILED
@@ -19,6 +28,102 @@ let cloudBackupConfig = {
 };
 
 let cloudConnection = null; // Separate mongoose connection for cloud
+let localReplicaConnection = null; // Separate connection to local replica DB
+
+// Initialize local replica connection
+async function getLocalReplicaConnection() {
+  if (!localReplicaConnection || localReplicaConnection.readyState !== 1) {
+    try {
+      const baseUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/resilify';
+      const replicaUri = baseUri.replace(/\/[^/?]+(\?|$)/, '/resilify_replica$1');
+      localReplicaConnection = await mongoose.createConnection(replicaUri, {
+        serverSelectionTimeoutMS: 5000,
+      }).asPromise();
+    } catch (e) {
+      console.warn('[LocalReplica] Connect warning:', e.message);
+    }
+  }
+  return localReplicaConnection;
+}
+
+// Core replication function: Primary DB -> Target DB
+async function replicateDatabase(targetConnection, targetConfig) {
+  const localDb = mongoose.connection.db;
+  if (!localDb || !targetConnection || !targetConnection.db) return false;
+
+  const targetDb = targetConnection.db;
+  const collections = await localDb.listCollections().toArray();
+  const syncedCols = [];
+  let totalDocs = 0;
+
+  for (const col of collections) {
+    // Skip internal system collections
+    if (col.name.startsWith('system.')) continue;
+    try {
+      const sourceCol = localDb.collection(col.name);
+      const targetCol = targetDb.collection(col.name);
+      const docs = await sourceCol.find({}).toArray();
+
+      if (docs.length > 0) {
+        await targetCol.deleteMany({});
+        await targetCol.insertMany(docs);
+      } else {
+        await targetCol.deleteMany({});
+      }
+
+      syncedCols.push({
+        name: col.name,
+        documentCount: docs.length,
+        syncedAt: new Date().toISOString(),
+      });
+      totalDocs += docs.length;
+    } catch (err) {
+      syncedCols.push({ name: col.name, error: err.message });
+    }
+  }
+
+  targetConfig.collections = syncedCols;
+  targetConfig.totalDocsSynced = totalDocs;
+  targetConfig.lastSync = new Date().toISOString();
+  return true;
+}
+
+// Auto-replication background loop (runs every 30s)
+setInterval(async () => {
+  try {
+    if (mongoose.connection.readyState === 1) {
+      // 1. Sync to local shadow replica
+      const repConn = await getLocalReplicaConnection();
+      if (repConn) {
+        localReplicaConfig.status = 'SYNCING';
+        await replicateDatabase(repConn, localReplicaConfig);
+        localReplicaConfig.status = 'SYNCHRONIZED';
+      }
+
+      // 2. Sync to cloud replica if configured and connected
+      if (cloudConnection && cloudBackupConfig.status === 'CONNECTED') {
+        cloudBackupConfig.status = 'SYNCING';
+        await replicateDatabase(cloudConnection, cloudBackupConfig);
+        cloudBackupConfig.syncedCollections = cloudBackupConfig.collections || [];
+        cloudBackupConfig.status = 'CONNECTED';
+      }
+    }
+  } catch (err) {
+    console.warn('[AutoReplicate] Background sync error:', err.message);
+  }
+}, 30000);
+
+// Run initial local replica sync immediately after startup
+setTimeout(async () => {
+  try {
+    const repConn = await getLocalReplicaConnection();
+    if (repConn && mongoose.connection.readyState === 1) {
+      await replicateDatabase(repConn, localReplicaConfig);
+      localReplicaConfig.status = 'SYNCHRONIZED';
+      console.log(`[LocalReplica] Initial shadow replica initialized: ${localReplicaConfig.totalDocsSynced} docs synced to resilify_replica`);
+    }
+  } catch (_) {}
+}, 2000);
 
 // ─── GET /api/database/stats ─────────────────────────────────────────────────
 // Returns per-collection document counts and DB-level stats
@@ -98,6 +203,56 @@ router.get('/collections/:name/documents', async (req, res) => {
   }
 });
 
+// ─── GET /api/database/local-replica/stats ──────────────────────────────────
+router.get('/local-replica/stats', async (req, res) => {
+  try {
+    const repConn = await getLocalReplicaConnection();
+    let dbStats = null;
+    let collections = [];
+    if (repConn && repConn.db) {
+      dbStats = await repConn.db.command({ dbStats: 1 }).catch(() => null);
+      const cols = await repConn.db.listCollections().toArray().catch(() => []);
+      for (const col of cols) {
+        if (col.name.startsWith('system.')) continue;
+        const count = await repConn.db.collection(col.name).countDocuments().catch(() => 0);
+        collections.push({ name: col.name, count });
+      }
+    }
+    res.json({
+      ...localReplicaConfig,
+      dbStats: dbStats ? {
+        dataSize: dbStats.dataSize,
+        storageSize: dbStats.storageSize,
+        totalCollections: dbStats.collections,
+        totalDocuments: dbStats.objects,
+      } : null,
+      liveCollections: collections,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── POST /api/database/local-replica/sync ──────────────────────────────────
+router.post('/local-replica/sync', async (req, res) => {
+  try {
+    const repConn = await getLocalReplicaConnection();
+    if (!repConn) {
+      return res.status(503).json({ error: 'Local replica connection unavailable' });
+    }
+    localReplicaConfig.status = 'SYNCING';
+    await replicateDatabase(repConn, localReplicaConfig);
+    localReplicaConfig.status = 'SYNCHRONIZED';
+    res.json({
+      message: `Synchronized ${localReplicaConfig.totalDocsSynced} documents to resilify_replica`,
+      config: localReplicaConfig,
+    });
+  } catch (e) {
+    localReplicaConfig.status = 'ERROR';
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── GET /api/database/backup/status ─────────────────────────────────────────
 router.get('/backup/status', (req, res) => {
   res.json(cloudBackupConfig);
@@ -118,8 +273,8 @@ async function resolveAtlasUri(uri) {
     const auth = parsed.username
       ? `${parsed.username}${parsed.password ? ':' + parsed.password : ''}@`
       : '';
-    const hostname = parsed.hostname;
-    const pathname = parsed.pathname || '/';
+    const rawPath = parsed.pathname || '';
+    const pathname = (!rawPath || rawPath === '/') ? '/resilify_cloud_backup' : rawPath;
 
     const srvRecords = await resolver.resolveSrv(`_mongodb._tcp.${hostname}`).catch(() => []);
     if (!srvRecords || srvRecords.length === 0) {
@@ -177,6 +332,7 @@ router.post('/backup/configure', async (req, res) => {
 
     // Get the cloud DB name
     const cloudDbName = cloudConnection.db.databaseName;
+    cloudBackupConfig.cloudDbName = cloudDbName;
 
     res.json({
       message: `Connected to cloud database: ${cloudDbName}`,

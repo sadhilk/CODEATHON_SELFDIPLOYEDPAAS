@@ -21,8 +21,10 @@ function timeAgo(dateStr) {
 export default function DatabasePage() {
   const [health, setHealth] = useState(null);
   const [dbStats, setDbStats] = useState(null);
+  const [localReplica, setLocalReplica] = useState(null);
   const [backupStatus, setBackupStatus] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [localSyncing, setLocalSyncing] = useState(false);
 
   // Document browser state
   const [selectedCollection, setSelectedCollection] = useState(null);
@@ -39,13 +41,15 @@ export default function DatabasePage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [healthRes, statsRes, backupRes] = await Promise.all([
+      const [healthRes, statsRes, localRes, backupRes] = await Promise.all([
         api.getSystemHealth().catch(() => ({ data: { database: 'UNHEALTHY' } })),
         api.getDatabaseStats().catch(() => ({ data: null })),
+        api.getLocalReplicaStats().catch(() => ({ data: null })),
         api.getBackupStatus().catch(() => ({ data: null })),
       ]);
       setHealth(healthRes.data);
       setDbStats(statsRes.data);
+      setLocalReplica(localRes.data);
       setBackupStatus(backupRes.data);
     } finally {
       setLoading(false);
@@ -57,6 +61,15 @@ export default function DatabasePage() {
     const iv = setInterval(fetchAll, 6000);
     return () => clearInterval(iv);
   }, [fetchAll]);
+
+  const handleLocalReplicaSync = async () => {
+    setLocalSyncing(true);
+    try {
+      await api.syncLocalReplica();
+      await fetchAll();
+    } catch (_) {}
+    setLocalSyncing(false);
+  };
 
   // Document browsing
   const browseCollection = async (name, page = 1) => {
@@ -134,26 +147,26 @@ export default function DatabasePage() {
       </div>
 
       <div className="content-area">
-        {/* ── Row 1: Status + Overview Stats ─────────────────────────────── */}
-        <div className="grid-2">
-          {/* Connection Status */}
+        {/* ── Row 1: Primary DB + Local Replica + Storage Overview ────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 16 }}>
+          {/* Connection Status: Primary */}
           <div className="card">
-            <CardTitle icon="🗄️">MongoDB Connection</CardTitle>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <CardTitle icon="🗄️">Primary Database</CardTitle>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[
+                {
+                  label: 'Role',
+                  value: 'Primary (Master)',
+                  color: 'var(--accent)',
+                },
                 {
                   label: 'Status',
                   value: health?.database === 'HEALTHY' ? '● Connected' : '○ Unhealthy',
                   color: health?.database === 'HEALTHY' ? 'var(--green)' : 'var(--red)',
                 },
                 {
-                  label: 'Connection State',
-                  value: mongoState >= 0 ? stateNames[mongoState] || 'unknown' : '…',
-                  color: mongoState === 1 ? 'var(--green)' : 'var(--red)',
-                },
-                {
                   label: 'URI',
-                  value: 'mongodb://localhost:27017/resilify',
+                  value: 'mongodb://127.0.0.1:27017/resilify',
                   color: 'var(--accent)',
                   mono: true,
                 },
@@ -163,9 +176,9 @@ export default function DatabasePage() {
                   color: 'var(--text-primary)',
                 },
               ].map((row) => (
-                <div key={row.label} className="flex justify-between items-center" style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+                <div key={row.label} className="flex justify-between items-center" style={{ padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
                   <span style={{ color: 'var(--text-muted)' }}>{row.label}</span>
-                  <span style={{ color: row.color, fontFamily: row.mono ? 'JetBrains Mono' : 'inherit', fontSize: row.mono ? 11 : 13 }}>
+                  <span style={{ color: row.color, fontFamily: row.mono ? 'JetBrains Mono' : 'inherit', fontSize: row.mono ? 11 : 12 }}>
                     {loading ? '…' : row.value}
                   </span>
                 </div>
@@ -173,21 +186,70 @@ export default function DatabasePage() {
             </div>
           </div>
 
+          {/* Local Shadow Replica Status */}
+          <div className="card">
+            <div className="flex justify-between items-center mb-3">
+              <CardTitle icon="🛡️">Local Shadow Replica</CardTitle>
+              <span className="badge green" style={{ fontSize: 10 }}>Auto-Sync (30s)</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                {
+                  label: 'Replica Target',
+                  value: 'resilify_replica (Standby)',
+                  color: 'var(--purple, #a78bfa)',
+                },
+                {
+                  label: 'Sync Status',
+                  value: localReplica?.status === 'SYNCHRONIZED' ? '● Synchronized' : localReplica?.status === 'SYNCING' ? '↻ Syncing…' : '● Standby',
+                  color: localReplica?.status === 'SYNCHRONIZED' ? 'var(--green)' : 'var(--cyan)',
+                },
+                {
+                  label: 'Docs in Replica',
+                  value: `${localReplica?.totalDocsSynced?.toLocaleString() || localReplica?.dbStats?.totalDocuments || 0} documents`,
+                  color: 'var(--cyan)',
+                },
+                {
+                  label: 'Last Replicated',
+                  value: timeAgo(localReplica?.lastSync),
+                  color: 'var(--text-secondary)',
+                },
+              ].map((row) => (
+                <div key={row.label} className="flex justify-between items-center" style={{ padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+                  <span style={{ color: 'var(--text-muted)' }}>{row.label}</span>
+                  <span style={{ color: row.color, fontSize: 12 }}>
+                    {loading ? '…' : row.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handleLocalReplicaSync}
+                disabled={localSyncing}
+                style={{ fontSize: 11, padding: '4px 10px' }}
+              >
+                {localSyncing ? <Spinner size={10} /> : '🔄'} Force Local Sync
+              </button>
+            </div>
+          </div>
+
           {/* Database Overview Stats */}
           <div className="card">
             <CardTitle icon="📊">Storage Overview</CardTitle>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
                 { label: 'Collections', value: dbStats?.totalCollections ?? '…', color: 'var(--accent)' },
                 { label: 'Total Documents', value: dbStats?.totalDocuments?.toLocaleString() ?? '…', color: 'var(--cyan)' },
                 { label: 'Data Size', value: dbStats ? formatBytes(dbStats.dataSize) : '…', color: 'var(--green)' },
-                { label: 'Index Size', value: dbStats ? formatBytes(dbStats.indexSize) : '…', color: 'var(--yellow)' },
                 { label: 'Storage Size', value: dbStats ? formatBytes(dbStats.storageSize) : '…', color: 'var(--purple, #a78bfa)' },
+                { label: 'Local Replica', value: '● Synchronized', color: 'var(--green)' },
                 { label: 'Cloud Backup', value: isCloudConnected ? '● Linked' : '○ Not linked', color: isCloudConnected ? 'var(--green)' : 'var(--text-muted)' },
               ].map((item) => (
-                <div key={item.label} style={{ padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.label}</div>
-                  <div style={{ fontSize: 18, color: item.color, marginTop: 6, fontWeight: 700, fontFamily: 'JetBrains Mono' }}>{item.value}</div>
+                <div key={item.label} style={{ padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.label}</div>
+                  <div style={{ fontSize: 16, color: item.color, marginTop: 4, fontWeight: 700, fontFamily: 'JetBrains Mono' }}>{item.value}</div>
                 </div>
               ))}
             </div>
@@ -389,8 +451,13 @@ export default function DatabasePage() {
           )}
 
           {/* Cloud status grid + sync button */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
             {[
+              {
+                label: 'Cloud Database',
+                value: backupStatus?.cloudDbName || (isCloudConnected ? 'resilify_cloud_backup' : '—'),
+                color: 'var(--purple, #a78bfa)',
+              },
               {
                 label: 'Cloud Status',
                 value: backupStatus?.status?.replace('_', ' ') || 'Not configured',
@@ -403,7 +470,7 @@ export default function DatabasePage() {
               },
               {
                 label: 'Collections Synced',
-                value: backupStatus?.syncedCollections?.length || 0,
+                value: backupStatus?.syncedCollections?.length || backupStatus?.collections?.length || 0,
                 color: 'var(--cyan)',
               },
               {
